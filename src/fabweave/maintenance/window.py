@@ -33,11 +33,18 @@ def assignment_decision(
     planned_maintenance: list[TimeBox],
 ) -> Decision:
     reasons: list[str] = []
+    elapsed_calendar = now - last_pm_at
     if accumulated_run_hours >= policy.run_interval:
         reasons.append("run_hour_maintenance_due")
-    if now - last_pm_at >= policy.calendar_interval:
+    if elapsed_calendar >= policy.calendar_interval:
         reasons.append("calendar_maintenance_due")
-    if any(window.start <= job_window.end and job_window.start <= window.end for window in planned_maintenance):
+    if any(window.overlaps(job_window) for window in planned_maintenance):
         reasons.append("planned_maintenance_overlap")
-    evidence = {"policy_revision": policy.revision, "job_start": job_window.start, "job_end": job_window.end}
+    evidence = {
+        "policy_revision": policy.revision,
+        "job_start": job_window.start,
+        "job_end": job_window.end,
+        "run_hours": accumulated_run_hours,
+        "calendar_hours": elapsed_calendar,
+    }
     return deny(*reasons, **evidence) if reasons else allow(**evidence)

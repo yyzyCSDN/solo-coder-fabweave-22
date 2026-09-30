@@ -103,8 +103,7 @@ def qualified_assignment(
 ) -> Decision:
     maintenance = assignment_decision(policy, last_pm_at, accumulated_run_hours, now, job_window, planned_maintenance)
     qualification = qualification_decision(tool_id, chamber_id, recipe_revision, job_window.start, qualifications)
-    qualification_result = qualification if qualification.allowed else allow(**qualification.evidence)
-    return _combine([maintenance, qualification_result])
+    return _combine([maintenance, qualification])
 
 
 @dataclass(frozen=True, slots=True)
