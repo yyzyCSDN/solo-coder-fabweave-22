@@ -171,6 +171,19 @@ def test_maintenance_assignment_combines_both_clocks_and_planned_window():
     assert "planned_maintenance_overlap" in assignment_decision(policy, 50, 10, 60, TimeBox(70, 80), [TimeBox(75, 90)]).reasons
 
 
+def test_maintenance_window_touching_at_boundary_is_not_an_overlap():
+    policy = MaintenancePolicy(1, run_interval=100, calendar_interval=100)
+    # Job starts exactly when maintenance ends: half-open intervals do not overlap.
+    decision = assignment_decision(policy, 0, 1, 10, TimeBox(20, 30), [TimeBox(0, 20)])
+    assert decision.allowed and not decision.reasons
+    evidence = decision.evidence
+    assert evidence["run_hours"] == 1 and evidence["run_interval"] == 100
+    assert evidence["calendar_hour"] == 10 and evidence["calendar_interval"] == 100
+    assert evidence["last_pm_at"] == 0
+    # A genuine overlap is still rejected.
+    assert "planned_maintenance_overlap" in assignment_decision(policy, 0, 1, 10, TimeBox(20, 30), [TimeBox(15, 21)]).reasons
+
+
 def test_chamber_matching_rejects_missing_non_finite_and_outside_parameters():
     tolerances = {"pressure": Tolerance(absolute=1), "flow": Tolerance(relative=0.1)}
     reasons = mismatch_reasons({"pressure": 10, "flow": 100}, {"pressure": 12}, tolerances)
@@ -288,6 +301,26 @@ def test_reserve_qualified_is_fail_closed_and_then_atomic():
 def test_qualified_assignment_combines_maintenance_and_recipe_state():
     decision = qualified_assignment(MaintenancePolicy(1, 100, 100), 0, 1, 10, TimeBox(20, 30), [], "T", "C", 2, [Qualification("T", "C", 2, 0, 40)])
     assert decision.allowed and decision.evidence["recipe_revision"] == 2
+
+
+def test_qualified_assignment_reports_qualification_rejection_with_clocks():
+    policy = MaintenancePolicy(1, run_interval=100, calendar_interval=100)
+    missing = qualified_assignment(policy, 0, 1, 10, TimeBox(20, 30), [], "T", "C", 2, [])
+    assert missing.reasons == ("qualification_missing",)
+    assert missing.evidence["recipe_revision"] == 2
+    # Maintenance clock readings travel with the rejection.
+    assert missing.evidence["run_hours"] == 1 and missing.evidence["calendar_hour"] == 10
+
+    expired = qualified_assignment(
+        policy, 0, 1, 10, TimeBox(20, 30), [], "T", "C", 2, [Qualification("T", "C", 2, 0, 19)]
+    )
+    assert expired.reasons == ("qualification_inactive",)
+
+    # A maintenance boundary rejection is reported together with the qualification failure.
+    both = qualified_assignment(
+        MaintenancePolicy(1, run_interval=100, calendar_interval=5), 0, 1, 10, TimeBox(20, 30), [], "T", "C", 2, []
+    )
+    assert both.reasons == ("calendar_maintenance_due", "qualification_missing",)
 
 
 def test_sample_evaluation_keeps_selected_membership_with_spc_rules():

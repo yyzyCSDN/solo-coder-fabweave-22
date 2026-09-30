@@ -37,7 +37,16 @@ def assignment_decision(
         reasons.append("run_hour_maintenance_due")
     if now - last_pm_at >= policy.calendar_interval:
         reasons.append("calendar_maintenance_due")
-    if any(window.start <= job_window.end and job_window.start <= window.end for window in planned_maintenance):
+    if any(job_window.overlaps(window) for window in planned_maintenance):
         reasons.append("planned_maintenance_overlap")
-    evidence = {"policy_revision": policy.revision, "job_start": job_window.start, "job_end": job_window.end}
+    evidence = {
+        "policy_revision": policy.revision,
+        "job_start": job_window.start,
+        "job_end": job_window.end,
+        "last_pm_at": last_pm_at,
+        "run_hours": accumulated_run_hours,
+        "run_interval": policy.run_interval,
+        "calendar_hour": now,
+        "calendar_interval": policy.calendar_interval,
+    }
     return deny(*reasons, **evidence) if reasons else allow(**evidence)
